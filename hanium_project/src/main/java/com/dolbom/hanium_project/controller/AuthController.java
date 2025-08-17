@@ -5,6 +5,8 @@ import com.dolbom.hanium_project.dto.request.SignUpRequestDto;
 import com.dolbom.hanium_project.service.AuthService;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
+@Tag(name = "사용자 관리", description = "사용자 관련 API")
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
