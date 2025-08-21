@@ -25,13 +25,17 @@ public class UserEntity {
     @Column(nullable = false)
     private String password;
 
+    @Column(name = "phone_number") // DB에는 phone_number 컬럼으로 생성됩니다.
+    private String phoneNumber;
+
     // 한 명의 User가 여러 명의 Patient를 가질 수 있음 (1:N 관계)
     @OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<PatientEntity> patients = new ArrayList<>();
 
     // 생성자
-    public UserEntity(String email, String password) {
+    public UserEntity(String email, String password, String phoneNumber) {
         this.email = email;
         this.password = password;
+        this.phoneNumber = phoneNumber;
     }
 }
