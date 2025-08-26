@@ -39,10 +39,9 @@ jobs:
               fi
               
               # 5. Gradle 빌드
-              echo ">>> Start Gradle build"
+              echo ">>> Start Gradle build with memory optimization"
               chmod +x ./gradlew
-              ./gradlew build -x test
-              echo ">>> Finish Gradle build"
+              ./gradlew build -x test --no-daemon -Dorg.gradle.jvmargs=-Xmx512m
               
               # 6. 새 서버 실행
               echo ">>> Starting new server..."
