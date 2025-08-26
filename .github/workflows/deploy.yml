@@ -1,56 +1,83 @@
-name: Spring Boot CI/CD with Git Pull
+name: Spring Boot CI/CD with Gradle
 
-# 'main' 브랜치에 푸시될 때 워크플로우 실행
 on:
   push:
     branches: [ "main" ]
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. EC2에 원격으로 접속하여 배포 스크립트를 실행
-      # ... (파일 상단 생략) ...
-      # ... (파일 상단 생략) ...
-      - name: Deploy to EC2 instance
+      # 1. 소스 코드 체크아웃
+      - name: Checkout Source Code
+        uses: actions/checkout@v3
+
+      # 2. JDK 17 설치
+      - name: Set up JDK 17
+        uses: actions/setup-java@v3
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. application-prod.properties 파일 생성
+      - name: Make application-prod.properties
+        run: |
+          mkdir -p ./hanium_project/src/main/resources
+          echo "${{ secrets.APPLICATION_PROD }}" > ./hanium_project/src/main/resources/application-prod.properties
+
+      # 4. Gradle 빌드
+      - name: Build with Gradle
+        run: |
+          cd ./hanium_project
+          chmod +x ./gradlew
+          ./gradlew build -x test
+
+      # 5. 빌드된 JAR 파일을 아티팩트로 업로드
+      - name: Upload JAR
+        uses: actions/upload-artifact@v3
+        with:
+          name: hanium-project-jar
+          path: ./hanium_project/build/libs/hanium_project-0.0.1-SNAPSHOT.jar
+
+  deploy:
+    needs: build # 'build' 작업이 성공해야만 실행됨
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. 빌드 아티팩트 다운로드
+      - name: Download JAR
+        uses: actions/download-artifact@v3
+        with:
+          name: hanium-project-jar
+
+      # 2. EC2에 JAR 파일 전송
+      - name: Transfer JAR to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.AWS_EC2_PEM_KEY }}
+          source: "hanium_project-0.0.1-SNAPSHOT.jar"
+          target: "/home/ubuntu/hanium_iot"
+
+      # 3. EC2에서 배포 스크립트 실행
+      - name: Execute Deploy Script on EC2
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.AWS_EC2_HOST }}
           username: ubuntu
           key: ${{ secrets.AWS_EC2_PEM_KEY }}
           script: |
-            PROJECT_DIR="/home/ubuntu/hanium_iot"
-            
-            # 1. 프로젝트 폴더로 이동 및 최신 소스 pull
-            echo ">>> Navigating to project directory and pulling latest source..."
-            if [ ! -d "$PROJECT_DIR" ]; then
-              git clone https://github.com/hurosuo/hanium_iot.git $PROJECT_DIR
-            fi
-            cd $PROJECT_DIR
-            git pull
-            
-            # 2. 백엔드 프로젝트 폴더로 이동
-            cd ./hanium_project
-            
-            # 3. 기존 서버 종료 (안정성 강화)
             JAR_NAME="hanium_project-0.0.1-SNAPSHOT.jar"
+            JAR_PATH="/home/ubuntu/hanium_iot/$JAR_NAME"
+            
+            # 기존 서버 종료
             PID=$(pgrep -f $JAR_NAME)
             if [ -n "$PID" ]; then
-              echo ">>> Stopping server with PID: $PID"
-              kill -15 $PID || true # ✅ kill 명령어 실패 시에도 스크립트가 중단되지 않도록 수정
+              kill -15 $PID
               sleep 5
-            else
-              echo ">>> No running server process found."
             fi
             
-            # 4. Gradle 빌드
-            echo ">>> Granting execute permission and starting Gradle build..."
-            chmod +x ./gradlew
-            ./gradlew build -x test --no-daemon -Dorg.gradle.jvmargs=-Xmx512m
-            
-            # 5. 새 서버 실행
-            echo ">>> Starting new server..."
-            BUILD_PATH="./build/libs/$JAR_NAME"
-            nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod $BUILD_PATH > /dev/null 2>&1 &
-            echo ">>> Deploy script finished."
+            # 새 서버 실행
+            nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod $JAR_PATH > /dev/null 2>&1 &
