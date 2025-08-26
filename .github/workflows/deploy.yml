@@ -1,56 +1,47 @@
-name: Spring Boot CI/CD with Gradle
+name: Spring Boot CI/CD with Git Pull
 
-# ⚠️ 이 부분이 잘못되었을 가능성이 높습니다.
+# 'main' 브랜치에 푸시될 때 워크플로우 실행
 on:
   push:
-    branches: [ "main" ] # 'main' 브랜치에 푸시(push)될 때 실행
+    branches: [ "main" ]
 
 jobs:
-  build-and-deploy:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. 소스 코드 체크아웃
-      - name: Checkout Source Code
-        uses: actions/checkout@v3
-
-      # 2. JDK 17 설치
-      - name: Set up JDK 17
-        uses: actions/setup-java@v3
-        with:
-          java-version: '17'
-          distribution: 'temurin'
-
-      # 3. application-prod.properties 파일 생성
-      - name: Make application-prod.properties
-        run: |
-          mkdir -p ./hanium_project/src/main/resources
-          echo "${{ secrets.APPLICATION_PROD }}" > ./hanium_project/src/main/resources/application-prod.properties
-
-      # 4. Gradle 빌드 권한 부여
-      - name: Grant execute permission for gradlew
-        run: chmod +x ./hanium_project/gradlew
-
-      # 5. Gradle 빌드
-      - name: Build with Gradle
-        run: ./hanium_project/gradlew -p ./hanium_project build -x test
-
-      # 6. EC2에 접속해서 배포
-      - name: Deploy to EC2
+      # 1. EC2에 원격으로 접속하여 배포 스크립트를 실행
+      - name: Deploy to EC2 instance
         uses: appleboy/ssh-action@master
         with:
           host: ${{ secrets.AWS_EC2_HOST }}
-          username: ubuntu
+          username: ubuntu # 👈 EC2 OS가 Amazon Linux면 'ec2-user'로 변경
           key: ${{ secrets.AWS_EC2_PEM_KEY }}
           script: |
-            cd ~/hanium_iot/hanium_project
+            # 1. hanium_iot 프로젝트 폴더로 이동 (없으면 GitHub에서 클론)
+            if [ ! -d "/home/ubuntu/hanium_iot" ]; then
+              git clone https://github.com/hurosuo/hanium_iot.git
+            fi
+            cd /home/ubuntu/hanium_iot
+            git pull
             
-            # 백그라운드에서 실행 중인 기존 서버 프로세스를 찾아 종료
+            # 2. hanium_project 백엔드 폴더로 이동
+            cd ./hanium_project
+            
+            # 3. 기존에 실행 중인 서버 프로세스 종료
             PID=$(pgrep -f hanium_project-0.0.1-SNAPSHOT.jar)
             if [ -n "$PID" ]; then
+              echo "Stopping server with PID: $PID"
               kill -9 $PID
               sleep 5
             fi
             
-            # 새로 빌드된 jar 파일을 백그라운드에서 실행
+            # 4. Gradle 실행 권한 부여
+            chmod +x ./gradlew
+            
+            # 5. 프로젝트 빌드 (테스트는 건너뛰기)
+            ./gradlew build -x test
+            
+            # 6. 새로 빌드된 .jar 파일을 백그라운드에서 실행
+            echo "Starting new server..."
             nohup java -jar -Dspring.profiles.active=prod ./build/libs/hanium_project-0.0.1-SNAPSHOT.jar &
