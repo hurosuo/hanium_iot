@@ -52,7 +52,7 @@ jobs:
           username: ubuntu
           key: ${{ secrets.AWS_EC2_PEM_KEY }}
           source: "hanium_project-0.0.1-SNAPSHOT.jar"
-          target: "/home/ubuntu/hanium_iot" # ✅ JAR 파일을 이 폴더에 직접 복사
+          target: "/home/ubuntu/hanium_iot"
 
       - name: Execute Deploy Script on EC2
         uses: appleboy/ssh-action@master
@@ -62,14 +62,13 @@ jobs:
           key: ${{ secrets.AWS_EC2_PEM_KEY }}
           script: |
             JAR_NAME="hanium_project-0.0.1-SNAPSHOT.jar"
-            # ✅ JAR 파일의 정확한 경로를 지정합니다.
             JAR_PATH="/home/ubuntu/hanium_iot/$JAR_NAME"
             
             # 기존 서버 종료
             PID=$(pgrep -f $JAR_NAME)
             if [ -n "$PID" ]; then
               kill -15 $PID
-              sleep 5
+              sleep 10 # ✅ 수정: 프로세스가 완전히 종료될 때까지 10초간 대기
             fi
             
             # 새 서버 실행
