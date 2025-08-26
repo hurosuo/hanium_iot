@@ -14,34 +14,38 @@ jobs:
       - name: Deploy to EC2 instance
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.AWS_EC2_HOST }}
-          username: ubuntu # 👈 EC2 OS가 Amazon Linux면 'ec2-user'로 변경
-          key: ${{ secrets.AWS_EC2_PEM_KEY }}
-          script: |
-            # 1. hanium_iot 프로젝트 폴더로 이동 (없으면 GitHub에서 클론)
-            if [ ! -d "/home/ubuntu/hanium_iot" ]; then
-              git clone https://github.com/hurosuo/hanium_iot.git
-            fi
-            cd /home/ubuntu/hanium_iot
-            git pull
-            
-            # 2. hanium_project 백엔드 폴더로 이동
-            cd ./hanium_project
-            
-            # 3. 기존에 실행 중인 서버 프로세스 종료
-            PID=$(pgrep -f hanium_project-0.0.1-SNAPSHOT.jar)
-            if [ -n "$PID" ]; then
-              echo "Stopping server with PID: $PID"
-              kill -9 $PID
-              sleep 5
-            fi
-            
-            # 4. Gradle 실행 권한 부여
-            chmod +x ./gradlew
-            
-            # 5. 프로젝트 빌드 (테스트는 건너뛰기)
-            ./gradlew build -x test
-            
-            # 6. 새로 빌드된 .jar 파일을 백그라운드에서 실행
-            echo "Starting new server..."
-            nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod ./build/libs/hanium_project-0.0.1-SNAPSHOT.jar &
+            host: ${{ secrets.AWS_EC2_HOST }}
+            username: ubuntu
+            key: ${{ secrets.AWS_EC2_PEM_KEY }}
+            script: |
+              # 1. 프로젝트 폴더로 이동, 없으면 클론
+              if [ ! -d "/home/ubuntu/hanium_iot" ]; then
+                git clone https://github.com/hurosuo/hanium_iot.git /home/ubuntu/hanium_iot
+              fi
+              cd /home/ubuntu/hanium_iot
+              git pull
+              
+              # 2. 백엔드 프로젝트 폴더로 이동
+              cd ./hanium_project
+              
+              # 3. 기존 서버 종료
+              PID=$(pgrep -f hanium_project-0.0.1-SNAPSHOT.jar)
+              if [ -n "$PID" ]; then
+                echo "Stopping server with PID: $PID"
+                kill -15 $PID
+                # 종료될 때까지 최대 10초 대기
+                for i in {1..10}; do
+                  if ! ps -p $PID > /dev/null; then
+                    break
+                  fi
+                  sleep 1
+                done
+              fi
+              
+              # 4. Gradle 빌드 (테스트 건너뛰기)
+              chmod +x ./gradlew
+              ./gradlew build -x test
+              
+              # 5. ✅ 메모리 옵션을 포함하여 새 서버 실행
+              echo "Starting new server..."
+              nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod ./build/libs/hanium_project-0.0.1-SNAPSHOT.jar &
