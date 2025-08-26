@@ -18,34 +18,33 @@ jobs:
             username: ubuntu
             key: ${{ secrets.AWS_EC2_PEM_KEY }}
             script: |
-              # 1. 프로젝트 폴더로 이동, 없으면 클론
+              set -ex # 👈 1. 각 명령어를 실행하기 전에 먼저 출력하고, 오류 발생 시 즉시 중단
+              
+              # 2. 프로젝트 폴더로 이동, 없으면 클론
               if [ ! -d "/home/ubuntu/hanium_iot" ]; then
                 git clone https://github.com/hurosuo/hanium_iot.git /home/ubuntu/hanium_iot
               fi
               cd /home/ubuntu/hanium_iot
               git pull
               
-              # 2. 백엔드 프로젝트 폴더로 이동
+              # 3. 백엔드 프로젝트 폴더로 이동
               cd ./hanium_project
               
-              # 3. 기존 서버 종료
+              # 4. 기존 서버 종료
               PID=$(pgrep -f hanium_project-0.0.1-SNAPSHOT.jar)
               if [ -n "$PID" ]; then
                 echo "Stopping server with PID: $PID"
                 kill -15 $PID
-                # 종료될 때까지 최대 10초 대기
-                for i in {1..10}; do
-                  if ! ps -p $PID > /dev/null; then
-                    break
-                  fi
-                  sleep 1
-                done
+                sleep 5
               fi
               
-              # 4. Gradle 빌드 (테스트 건너뛰기)
+              # 5. Gradle 빌드
+              echo ">>> Start Gradle build"
               chmod +x ./gradlew
               ./gradlew build -x test
+              echo ">>> Finish Gradle build"
               
-              # 5. ✅ 메모리 옵션을 포함하여 새 서버 실행
-              echo "Starting new server..."
+              # 6. 새 서버 실행
+              echo ">>> Starting new server..."
               nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod ./build/libs/hanium_project-0.0.1-SNAPSHOT.jar &
+              echo ">>> Server start command executed"
