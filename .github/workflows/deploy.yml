@@ -11,39 +11,40 @@ jobs:
 
     steps:
       # 1. EC2에 원격으로 접속하여 배포 스크립트를 실행
+      # ... (파일 상단 생략) ...
       - name: Deploy to EC2 instance
         uses: appleboy/ssh-action@master
         with:
-            host: ${{ secrets.AWS_EC2_HOST }}
-            username: ubuntu
-            key: ${{ secrets.AWS_EC2_PEM_KEY }}
-            script: |
-              set -ex # 👈 1. 각 명령어를 실행하기 전에 먼저 출력하고, 오류 발생 시 즉시 중단
-              
-              # 2. 프로젝트 폴더로 이동, 없으면 클론
-              if [ ! -d "/home/ubuntu/hanium_iot" ]; then
-                git clone https://github.com/hurosuo/hanium_iot.git /home/ubuntu/hanium_iot
-              fi
-              cd /home/ubuntu/hanium_iot
-              git pull
-              
-              # 3. 백엔드 프로젝트 폴더로 이동
-              cd ./hanium_project
-              
-              # 4. 기존 서버 종료
-              PID=$(pgrep -f hanium_project-0.0.1-SNAPSHOT.jar)
-              if [ -n "$PID" ]; then
-                echo "Stopping server with PID: $PID"
-                kill -15 $PID
-                sleep 5
-              fi
-              
-              # 5. Gradle 빌드
-              echo ">>> Start Gradle build with memory optimization"
-              chmod +x ./gradlew
-              ./gradlew build -x test --no-daemon -Dorg.gradle.jvmargs=-Xmx512m
-              
-              # 6. 새 서버 실행
-              echo ">>> Starting new server..."
-              nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod ./build/libs/hanium_project-0.0.1-SNAPSHOT.jar &
-              echo ">>> Server start command executed"
+          host: ${{ secrets.AWS_EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.AWS_EC2_PEM_KEY }}
+          script: |
+            # 1. 프로젝트 폴더로 이동 및 최신 소스 pull
+            echo ">>> Navigating to project directory and pulling latest source..."
+            cd /home/ubuntu/hanium_iot || (git clone https://github.com/hurosuo/hanium_iot.git /home/ubuntu/hanium_iot && cd /home/ubuntu/hanium_iot)
+            git pull
+            
+            # 2. 백엔드 프로젝트 폴더로 이동
+            cd ./hanium_project
+            
+            # 3. 기존 서버 종료
+            JAR_NAME="hanium_project-0.0.1-SNAPSHOT.jar"
+            PID=$(pgrep -f $JAR_NAME)
+            if [ -n "$PID" ]; then
+              echo ">>> Stopping server with PID: $PID"
+              kill -15 $PID
+              sleep 5
+            else
+              echo ">>> No running server process found."
+            fi
+            
+            # 4. Gradle 빌드
+            echo ">>> Granting execute permission and starting Gradle build..."
+            chmod +x ./gradlew
+            ./gradlew build -x test --no-daemon -Dorg.gradle.jvmargs=-Xmx512m
+            
+            # 5. 새 서버 실행
+            echo ">>> Starting new server..."
+            BUILD_PATH="./build/libs/$JAR_NAME"
+            nohup java -Xms256m -Xmx512m -jar -Dspring.profiles.active=prod $BUILD_PATH > /dev/null 2>&1 &
+            echo ">>> Deploy script finished."
