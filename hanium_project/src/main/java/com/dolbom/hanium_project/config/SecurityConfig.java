@@ -13,7 +13,6 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
-// --- CORS 관련 import 추가 ---
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
@@ -31,12 +30,14 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
-    // ✅ CORS 설정을 위한 Bean을 추가합니다.
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration configuration = new CorsConfiguration();
 
-        configuration.addAllowedOrigin("http://localhost:5173"); // 프론트엔드 서버 주소
+        // 프론트엔드 서버 주소 (localhost와 모바일 접속용 IP)
+        configuration.addAllowedOrigin("http://localhost:5173");
+        configuration.addAllowedOrigin("http://192.168.0.19:5173"); // 모바일 접속 허용
+
         configuration.addAllowedMethod("*"); // 모든 HTTP 메서드 허용
         configuration.addAllowedHeader("*"); // 모든 헤더 허용
         configuration.setAllowCredentials(true); // 자격 증명(쿠키 등) 허용
@@ -49,7 +50,7 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
-        // ✅ CORS 설정을 필터 체인에 적용합니다.
+        // CORS 설정 적용
         http.cors(cors -> cors.configurationSource(corsConfigurationSource()));
 
         // CSRF 보호 비활성화
@@ -74,7 +75,7 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
         );
 
-        // 우리가 만든 JWT 인증 필터를 UsernamePasswordAuthenticationFilter 앞에 추가합니다.
+        // JWT 인증 필터를 UsernamePasswordAuthenticationFilter 앞에 추가
         http.addFilterBefore(new JwtAuthenticationFilter(jwtUtil, userDetailsService), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
